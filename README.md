@@ -1,15 +1,6 @@
-Quick testing of streaming with a little help of mad_ady.
-Fixes and kernels from memeka.
-
 PREREQUISITES:
-you must use the HK ubuntu 16.04 image for xu4.
-Install guide:
-The gstreamer stuff:
-    dpkg -i binaries-ma/*.deb
-
-The kernel:
-clone the [odroidxu4-4.9.y](https://github.com/hardkernel/linux/tree/odroidxu4-4.9.y) branch
-and create the dtb and images
+you must use the latest HK ubuntu 16.04 image for xu4.
+(2017-08-24 at least)
 
 Examples:
 This directory contains my gst-launch tests to make everything multicastable.
