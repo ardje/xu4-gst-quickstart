@@ -16,7 +16,7 @@ gst-launch-1.0 -v \
 	queue ! \
         videoconvert ! \
 	${ENCODER} extra-controls="encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304" ! \
-	h264parse ! \
+	h264parse config-interval=2 ! \
 	mpegtsmux name=tsmux ! \
 	rtpmp2tpay ! \
 	queue ! \
