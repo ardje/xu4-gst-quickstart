@@ -1,0 +1,32 @@
+sintel trailers:
+The sintel trailers are 51.9s long and can be downloaded from:
+https://download.blender.org/durian/trailer/
+In the test both 1080p and 720p versions are used.
+
+test1-*: *offline encode and decode test*
+Just make sure we can decode and encode a movie in good enough time
+1080p is too slow
+720p finishes decode and encode in 36 minutes.
+
+test3*: *client tests*
+Test3 shows the multicasting of the original streams.
+This is necessary to decide if your *client* is able to play it at all.
+1080p is unplayable in low end pc's
+720p is ok on low end pc's
+
+Test4*:
+Use videotestsrc as a source... arg1 is pattern...
+0 is the default
+18 is a bouncing ball...
+1 is snow which probably brakes everything.
+videotestsrc is very heavy...
+This *will* break your encoder...
+
+Test5:
+real working uvc webcam streaming.
+
+Test6:
+Really not working uvc webcam and audio streaming. It stalls.
+
+Test7:
+screencast of desktop.
