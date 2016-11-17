@@ -38,3 +38,6 @@ ip ro add multicast 224.0.0.0/4 dev $IFACE
 
 I also added an udev directory containing some rules to fix your eth devices...
 
+BTW:
+You might need to rm -fr ~/.cache/gstreamer-1.0
+to remove the cached plugin status
