@@ -30,3 +30,12 @@ Really not working uvc webcam and audio streaming. It stalls.
 
 Test7:
 screencast of desktop.
+
+
+If you want to see the data flows, do this:
+export GST_DEBUG_DUMP_DOT_DIR=$PWD/tmp/
+mkdir tmp
+before starting an example...
+gstreamer will create dot compatible files for each state transition.
+After installing graphviz, you can dot -Tsvg <file> > graph.svg
+and view the svg with your browser
