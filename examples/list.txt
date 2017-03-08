@@ -31,6 +31,10 @@ Really not working uvc webcam and audio streaming. It stalls.
 Test7:
 screencast of desktop.
 
+Test8:
+real working uvc webcam streaming, like test5, but almost no parameters.
+see: https://www.youtube.com/watch?v=GZNY5zAQzKU
+
 
 If you want to see the data flows, do this:
 export GST_DEBUG_DUMP_DOT_DIR=$PWD/tmp/
@@ -39,3 +43,6 @@ before starting an example...
 gstreamer will create dot compatible files for each state transition.
 After installing graphviz, you can dot -Tsvg <file> > graph.svg
 and view the svg with your browser
+
+
+The file whatdevices.sh "asks" gst-inspect the decoder and encoder endpoint names. They change on each boot it seems.
