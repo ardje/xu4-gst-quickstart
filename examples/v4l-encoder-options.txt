@@ -1,0 +1,76 @@
+
+User Controls
+
+error 22 getting ctrl Min Number of Output Buffers
+
+Codec Controls
+
+                 video_b_frames (int)    : min=0 max=2 step=1 default=0 value=0 flags=update
+                 video_gop_size (int)    : min=0 max=65535 step=1 default=12 value=12
+              video_gop_closure (bool)   : default=1 value=1
+                  video_bitrate (int)    : min=1 max=1073741823 step=1 default=1 value=1
+    number_of_intra_refresh_mbs (int)    : min=0 max=65535 step=1 default=0 value=0
+frame_level_rate_control_enable (bool)   : default=0 value=0
+           sequence_header_mode (menu)   : min=0 max=1 default=0 value=0
+     h264_mb_level_rate_control (bool)   : default=0 value=0
+       maximum_bytes_in_a_slice (int)    : min=1900 max=1073741823 step=1 default=1900 value=1900
+       number_of_mbs_in_a_slice (int)    : min=1 max=65535 step=1 default=1 value=1
+      slice_partitioning_method (menu)   : min=0 max=2 default=0 value=0
+                vbv_buffer_size (int)    : min=0 max=65535 step=1 default=0 value=0
+     horizontal_mv_search_range (int)    : min=16 max=128 step=16 default=32 value=32
+       vertical_mv_search_range (int)    : min=16 max=128 step=16 default=32 value=32
+                force_key_frame (button) : flags=write-only, execute-on-write
+          h263_i_frame_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+          h263_p_frame_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+          h263_b_frame_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+          h263_minimum_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+          h263_maximum_qp_value (int)    : min=1 max=31 step=1 default=31 value=31
+          h264_i_frame_qp_value (int)    : min=0 max=51 step=1 default=1 value=1
+          h264_p_frame_qp_value (int)    : min=0 max=51 step=1 default=1 value=1
+          h264_b_frame_qp_value (int)    : min=0 max=51 step=1 default=1 value=1
+          h264_minimum_qp_value (int)    : min=0 max=51 step=1 default=1 value=1
+          h264_maximum_qp_value (int)    : min=0 max=51 step=1 default=51 value=51
+      h264_8x8_transform_enable (bool)   : default=0 value=0
+           h264_cpb_buffer_size (int)    : min=0 max=65535 step=1 default=0 value=0
+              h264_entropy_mode (menu)   : min=0 max=1 default=0 value=0
+            h264_i_frame_period (int)    : min=0 max=65535 step=1 default=0 value=0
+                     h264_level (menu)   : min=0 max=11 default=0 value=0
+  h264_loop_filter_alpha_offset (int)    : min=-6 max=6 step=1 default=0 value=0
+   h264_loop_filter_beta_offset (int)    : min=-6 max=6 step=1 default=0 value=0
+          h264_loop_filter_mode (menu)   : min=0 max=2 default=0 value=0
+                   h264_profile (menu)   : min=0 max=16 default=0 value=0
+           vertical_size_of_sar (int)    : min=0 max=65535 step=1 default=0 value=0
+         horizontal_size_of_sar (int)    : min=0 max=65535 step=1 default=0 value=0
+        aspect_ratio_vui_enable (bool)   : default=0 value=0
+           vui_aspect_ratio_idc (menu)   : min=0 max=17 default=0 value=0
+         mpeg4_i_frame_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+         mpeg4_p_frame_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+         mpeg4_b_frame_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+         mpeg4_minimum_qp_value (int)    : min=1 max=31 step=1 default=1 value=1
+         mpeg4_maximum_qp_value (int)    : min=0 max=51 step=1 default=51 value=51
+                    mpeg4_level (menu)   : min=0 max=7 default=0 value=0
+                  mpeg4_profile (menu)   : min=0 max=1 default=0 value=0
+    quarter_pixel_search_enable (bool)   : default=0 value=0
+       vpx_number_of_partitions (intmenu): min=0 max=3 default=0 value=0
+vpx_intra_mode_decision_disable (int)    : min=0 max=1 step=1 default=0 value=0
+     vpx_no_of_refs_for_p_frame (intmenu): min=0 max=1 default=0 value=0
+    vpx_loop_filter_level_range (int)    : min=0 max=63 step=1 default=0 value=0
+  vpx_deblocking_effect_control (int)    : min=0 max=7 step=1 default=0 value=0
+vpx_golden_frame_refresh_period (int)    : min=0 max=65535 step=1 default=0 value=0
+     vpx_golden_frame_indicator (menu)   : min=0 max=1 default=0 value=0
+           vpx_minimum_qp_value (int)    : min=0 max=11 step=1 default=0 value=0
+           vpx_maximum_qp_value (int)    : min=0 max=127 step=1 default=127 value=127
+           vpx_i_frame_qp_value (int)    : min=0 max=127 step=1 default=10 value=10
+           vpx_p_frame_qp_value (int)    : min=0 max=127 step=1 default=10 value=10
+                    vpx_profile (int)    : min=0 max=3 step=1 default=0 value=0
+              frame_skip_enable (menu)   : min=0 max=2 default=0 value=0
+               force_frame_type (menu)   : min=0 max=2 default=0 value=0
+         padding_control_enable (bool)   : default=0 value=0
+        padding_color_yuv_value (int)    : min=0 max=33554431 step=1 default=0 value=0
+        fixed_target_bit_enable (bool)   : default=0 value=0
+    rate_control_reaction_coeff (int)    : min=1 max=65535 step=1 default=1 value=1
+  h264_activity_reg_adaptive_rc (bool)   : default=0 value=0
+      h264_dark_reg_adaptive_rc (bool)   : default=0 value=0
+    h264_smooth_reg_adaptive_rc (bool)   : default=0 value=0
+    h264_static_reg_adaptive_rc (bool)   : default=0 value=0
+    the_number_of_ref_pic_for_p (int)    : min=1 max=2 step=1 default=1 value=1
