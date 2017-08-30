@@ -13,6 +13,8 @@ case "$mode" in
 		width=720 height=480 speed=4 ;;
 	720p)
 		width=1280 height=720 speed=3 ;;
+	1080p)
+		width=1920 height=1080 speed=3 ;;
 esac
 gst-launch-1.0 -v \
 	v4l2src do-timestamp=true device=$DEVICE ! \
