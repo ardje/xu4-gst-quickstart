@@ -42,7 +42,7 @@ log.warning("create first element")
 local src=Gst.ElementFactory.make('v4l2src','grabber')
 src.do_timestamp=true
 src.device="/dev/video0"
-src.num_buffers=100
+src.num_buffers=1000
 pipeline:add(src)
 local srcfilter=Gst.ElementFactory.make('capsfilter','srcfilter')
 srcfilter.caps=Gst.caps_from_string"video/x-raw, format=YUY2,framerate=60/1, width=1280, height=720"
