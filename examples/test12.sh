@@ -17,14 +17,15 @@ case "$mode" in
 		width=1920 height=1080 speed=3 ;;
 esac
 gst-launch-1.0 -v \
-	v4l2src do-timestamp=true device=$DEVICE ! \
+	v4l2src do-timestamp=true device=$DEVICE num-buffers=1000 ! \
         video/x-raw, format=$FORMAT,framerate=60/1, width=$width, height=$height ! \
 	queue ! \
-	${CONVERT1} ! \
+	cpureport ! \
+	${CONVERT1} output-io-mode=dmabuf ! \
         video/x-raw, format=NV12, width=1280, height=720 ! \
 	${ENCODER} extra-controls="encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304" ! \
 	h264parse config-interval=2 ! \
+	progressreport update-freq=1 ! \
 	avimux name=mux ! \
 	filesink location=$FN \
 	
-	#progressreport update-freq=1 ! \
