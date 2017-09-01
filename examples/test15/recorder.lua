@@ -117,4 +117,10 @@ web["/recorder/unpause"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused
 	msg.status_code=200
 	msg.response_body:complete()
 end
+web["/recorder/cleanup"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
+	M:cleanup()
+	log.warning("cleanup")
+	msg.status_code=200
+	msg.response_body:complete()
+end
 return M
