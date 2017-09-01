@@ -70,11 +70,13 @@ function M:setup(app,server)
 	parser.config_interval=2
 	pipeline:add(parser)
 	encoder:link(parser)
+	self.parser=parser
 
 	local mux=Gst.ElementFactory.make('mp4mux','mux')
 	mux.fragment_duration=10000
 	pipeline:add(mux)
 	parser:link(mux)
+	self.mux=mux
 
 
 	-- filesink location=$FN
@@ -83,12 +85,13 @@ function M:setup(app,server)
 	sink.sync="false"
 	pipeline:add(sink)
 	mux:link(sink)
+	self.sink=sink	
 
 	--pipeline:add_many(src,srcfilter,csp,cspfilter,encoder,parser,mux,sink)
 	--src:link_many(colorspace,encoder,parser,mux,sink)
 	--play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
 	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_callback)
-	pipeline.message_forward = True
+	pipeline.message_forward = true
 	server:add_handler('/recorder', function(s, msg, path, query, ctx) -- luacheck: no unused args
 		if web[path] then
 			return web[path](M,s,msg,path,query,ctx)
@@ -97,6 +100,27 @@ function M:setup(app,server)
 			msg.response_body:complete()
 		end
 	end)
+end
+function M:reopen_file()
+	self:pause()
+	self.mux:unlink(self.sink)
+	self.pipeline:remove(self.sink)
+	self.parser:unlink(self.mux)
+	self.pipeline:remove(self.mux)
+	self.mux.state='NULL'
+	self.sink.state='NULL'
+
+	self.mux=Gst.ElementFactory.make('mp4mux','mux')
+	self.mux.fragment_duration=10000
+	self.pipeline:add(self.mux)
+	self.parser:link(self.mux)
+
+	-- filesink location=$FN
+	self.sink=Gst.ElementFactory.make('filesink','sink')
+	self.sink.location="test2.mp4"
+	self.sink.sync="false"
+	self.pipeline:add(self.sink)
+	self.mux:link(self.sink)
 end
 
 function M:send_eos()
@@ -111,7 +135,7 @@ function M:unpause()
 	self.pipeline.state='PLAYING'
 end
 function M:stop()
-	M:send_eos()
+	self:send_eos()
 end
 function M:cleanup()
 	self.pipeline.state='NULL'
@@ -130,6 +154,12 @@ web["/recorder/unpause"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused
 end
 web["/recorder/stop"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
 	M:stop()
+	log.warning("stop")
+	msg.status_code=200
+	msg.response_body:complete()
+end
+web["/recorder/reopen"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
+	M:reopen_file()
 	log.warning("stop")
 	msg.status_code=200
 	msg.response_body:complete()
