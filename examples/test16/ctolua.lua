@@ -3,15 +3,17 @@ local lgi = require 'lgi'
 local GLib = lgi.GLib
 local Gst = lgi.Gst
 local log=lgi.log.domain'c test'
-local main_loop = GLib.MainLoop()
 --local dh=require"dumphash"
 --local pretty=require"pl.pretty"
 
 local VIDEO_CAPS="video/x-raw,width=640,height=480,format=I420,framerate=25/1"
-
+local PROBE_OK=Gst.PadProbeReturn.OK
+local PROBE_REMOVE=Gst.PadProbeReturn.REMOVE
+local PROBE_DROP=Gst.PadProbeReturn.DROP
 local function block_probe_cb(pad, info)
+	log.warning("pad blocked")
 	log.warning(("pad %s blocked"):format(pad))
-	return true
+	return PROBE_OK
 end
 local function app_update_filesink_location(app)
 	local fn=("/var/tmp/test-%03d.mp4"):format(app.chunk_count)
@@ -19,16 +21,16 @@ local function app_update_filesink_location(app)
 	log.warning(("Setting filesink to %s"):format(fn))
 	app.filesink.location=fn
 end
-local function bus_cb(_, message,app)
+local function bus_cb(bus, message,app)
    if message.type.ERROR then
       log.warning('Error:', message:parse_error().message)
-      main_loop:quit()
+      app.loop:quit()
    elseif message.type.EOS then
       log.warning 'end of stream'
-      main_loop:quit()
+      app.loop:quit()
    elseif message.type.STATE_CHANGED then
       local old, new, pending = message:parse_state_changed()
-      log.warning(string.format('state changed: %s->%s:%s', old, new, pending))
+      log.warning(string.format('state changed: %s->%s:%s %s', old, new, pending,bus))
    elseif message.type.TAG then
       message:parse_tag():foreach(
 	 function(list, tag)
@@ -41,6 +43,7 @@ end
 
 local function main()
 	local app={}
+	app.loop = GLib.MainLoop()
 	local pipeline=Gst.parse_launch( "videotestsrc is-live=true ! ".. VIDEO_CAPS..
 		" ! clockoverlay ! x264enc tune=zerolatency bitrate=8000 "..
 		" ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
@@ -68,7 +71,9 @@ local function main()
 	app_update_filesink_location(app)
 	app.muxer=pipeline:get_by_name"mux"
 	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_cb,app)
-	main_loop:run()
+	pipeline.state='PLAYING'
+	app.loop:run()
+	pipeline.state='NULL'
 end
 
 main()	
