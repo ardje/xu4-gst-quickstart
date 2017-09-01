@@ -80,6 +80,7 @@ function M:setup(app,server)
 	-- filesink location=$FN
 	local sink=Gst.ElementFactory.make('filesink','sink')
 	sink.location="test.mp4"
+	sink.sync="false"
 	pipeline:add(sink)
 	mux:link(sink)
 
@@ -87,6 +88,7 @@ function M:setup(app,server)
 	--src:link_many(colorspace,encoder,parser,mux,sink)
 	--play.uri = 'http://www.cybertechmedia.com/samples/raycharles.mov'
 	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_callback)
+	pipeline.message_forward = True
 	server:add_handler('/recorder', function(s, msg, path, query, ctx) -- luacheck: no unused args
 		if web[path] then
 			return web[path](M,s,msg,path,query,ctx)
@@ -96,11 +98,20 @@ function M:setup(app,server)
 		end
 	end)
 end
+
+function M:send_eos()
+	log.warning("Sending EOS now")
+	self.pipeline:send_event(Gst.Event.new_eos())
+end
+
 function M:pause()
 	self.pipeline.state='PAUSED'
 end
 function M:unpause()
 	self.pipeline.state='PLAYING'
+end
+function M:stop()
+	M:send_eos()
 end
 function M:cleanup()
 	self.pipeline.state='NULL'
@@ -117,9 +128,9 @@ web["/recorder/unpause"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused
 	msg.status_code=200
 	msg.response_body:complete()
 end
-web["/recorder/cleanup"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
-	M:cleanup()
-	log.warning("cleanup")
+web["/recorder/stop"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
+	M:stop()
+	log.warning("stop")
 	msg.status_code=200
 	msg.response_body:complete()
 end
