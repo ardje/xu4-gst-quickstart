@@ -41,6 +41,27 @@ local function bus_cb(bus, message,app)
    return true
 end
 
+function push_eos_thread(app)
+	local peer=app.vrecq_src:get_peer()
+	log.warning(("pusing eos event on pad %s"):format(peer))
+end
+
+local function stop_recording_cb(app)
+	log.warning("stop recording")
+	app.vrecq_src_probe_id=app.vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,block_probe_cb,nil,nil)
+	return false;
+end
+
+local function start_recording_cb(app)
+	log.warning("timeout, unblocking pad to start recording")
+	app.buffer_count=0
+	app.vrecq_src:add_probe(Gst.PadProbeType.BUFFER,probe_drop_one_cb,app,nil)
+	app.vrecq_src:remove_probe(app.vrecq_src_probe_id)
+	app.vrecq_src_probe_id=0
+	GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15, stop_recording_cb, app)
+	return false;
+end
+
 local function main()
 	local app={}
 	app.loop = GLib.MainLoop()
@@ -72,6 +93,7 @@ local function main()
 	app.muxer=pipeline:get_by_name"mux"
 	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_cb,app)
 	pipeline.state='PLAYING'
+	GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15, start_recording_cb, app)
 	app.loop:run()
 	pipeline.state='NULL'
 end
