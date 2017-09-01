@@ -38,7 +38,7 @@
  */
 #include <gst/gst.h>
 
-#define VIDEO_CAPS "video/x-raw,width=1920,height=1080,format=I420"
+#define VIDEO_CAPS "video/x-raw,width=640,height=480,format=I420,framerate=25/1"
 
 typedef struct
 {
@@ -59,7 +59,7 @@ app_update_filesink_location (RecordApp * app)
 {
   gchar *fn;
 
-  fn = g_strdup_printf ("/tmp/test-%03d.mp4", app->chunk_count++);
+  fn = g_strdup_printf ("/var/tmp/test-%03d.mp4", app->chunk_count++);
   g_print ("Setting filesink location to '%s'\n", fn);
   g_object_set (app->filesink, "location", fn, NULL);
   g_free (fn);
@@ -206,7 +206,7 @@ main (int argc, char **argv)
   gst_init (NULL, NULL);
 
   app.pipeline =
-      gst_parse_launch ("videotestsrc ! " VIDEO_CAPS
+      gst_parse_launch ("videotestsrc is-live=true ! " VIDEO_CAPS
       " ! clockoverlay ! x264enc tune=zerolatency bitrate=8000 "
       " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
       NULL);
