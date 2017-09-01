@@ -12,7 +12,7 @@ local PROBE_REMOVE=Gst.PadProbeReturn.REMOVE
 local PROBE_DROP=Gst.PadProbeReturn.DROP
 local function block_probe_cb(pad, info)
 	log.warning("pad blocked")
-	log.warning(("pad %s:%s blocked"):format(pad.name,pad))
+	log.warning(("pad %s:%s blocked"):format(pad.parent.name,pad.name))
 	return PROBE_OK
 end
 local function app_update_filesink_location(app)
@@ -21,7 +21,7 @@ local function app_update_filesink_location(app)
 	log.warning(("Setting filesink to %s"):format(fn))
 	app.filesink.location=fn
 end
-local function bus_cb(bus, message,app)
+local function bus_cb(app,bus, message)
    if message.type.ERROR then
       log.warning('Error:', message:parse_error().message)
       app.loop:quit()
@@ -55,10 +55,10 @@ end
 local function start_recording_cb(app)
 	log.warning("timeout, unblocking pad to start recording")
 	app.buffer_count=0
-	app.vrecq_src:add_probe(Gst.PadProbeType.BUFFER,probe_drop_one_cb,app,nil)
+	app.vrecq_src:add_probe(Gst.PadProbeType.BUFFER,function() return probe_drop_one_cb(app) end)
 	app.vrecq_src:remove_probe(app.vrecq_src_probe_id)
 	app.vrecq_src_probe_id=0
-	GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15, stop_recording_cb, app)
+	GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return stop_recording_cb(app) end)
 	return false;
 end
 
@@ -83,7 +83,7 @@ local function main()
 	app.vrecq_src=vrecq_src
 	print(vrecq_src)
 	print(Gst.PadProbeType.BLOCK)
-	local vrecq_src_probe_id=vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,block_probe_cb,nil,nil)
+	local vrecq_src_probe_id=vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,block_probe_cb)
 	print(vrecq_src_probe_id)
 	app.vrecq_src_probe_id=vrecq_src_probe_id
 	app.chunk_count=0
@@ -91,9 +91,9 @@ local function main()
 	print(app.filesink)
 	app_update_filesink_location(app)
 	app.muxer=pipeline:get_by_name"mux"
-	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, bus_cb,app)
+	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, function(...) return bus_cb(app,...) end)
 	pipeline.state='PLAYING'
-	GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15, start_recording_cb, app)
+	GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return start_recording_cb(app) end)
 	app.loop:run()
 	pipeline.state='NULL'
 end
