@@ -12,7 +12,7 @@ local PROBE_REMOVE=Gst.PadProbeReturn.REMOVE
 local PROBE_DROP=Gst.PadProbeReturn.DROP
 local function block_probe_cb(pad, info)
 	log.warning("pad blocked")
-	log.warning(("pad %s blocked"):format(pad))
+	log.warning(("pad %s:%s blocked"):format(pad.name,pad))
 	return PROBE_OK
 end
 local function app_update_filesink_location(app)
