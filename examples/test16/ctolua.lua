@@ -27,10 +27,12 @@ local function bus_cb(app,bus, message)
       app.loop:quit()
    elseif message.type.EOS then
       log.warning 'end of stream'
-      app.loop:quit()
+      --app.loop:quit()
    elseif message.type.STATE_CHANGED then
       local old, new, pending = message:parse_state_changed()
       log.warning(string.format('state changed: %s->%s:%s %s', old, new, pending,bus))
+   elseif message.type.ELEMENT then
+	log.warning 'message'
    elseif message.type.TAG then
       message:parse_tag():foreach(
 	 function(list, tag)
@@ -52,10 +54,57 @@ local function stop_recording_cb(app)
 	return false;
 end
 
+-- static GstPadProbeReturn
+-- probe_drop_one_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+-- {
+--  RecordApp *app = user_data;
+--  GstBuffer *buf = info->data;
+local function probe_drop_one_cb(app,pad,info)
+	app.buffer_count=app.buffer_count+1
+	local buffer=info:get_buffer()
+	local buffer_flags=buffer:get_flags()
+  	-- if (app->buffer_count++ == 0) {
+	for k,v in pairs(buffer:get_flags()) do
+		log.warning(("%s:%s"):format(k,v))
+	end
+	if app.buffer_count==1 then
+		log.warning"drop one buffer"
+    		-- g_print ("Drop one buffer with ts %" GST_TIME_FORMAT "\n",
+		--         GST_TIME_ARGS (GST_BUFFER_PTS (info->data)));
+    		-- return GST_PAD_PROBE_DROP;
+		return PROBE_DROP
+	else
+	--  } else {
+	--    gboolean is_keyframe;
+		if buffer_flags.DELTA_UNIT then
+			log.warning"Waiting for keyframe"
+			return PROBE_DROP
+		else
+			log.warning"Found keyframe"
+			return PROBE_REMOVE
+		end
+	end
+end
+--[[
+    is_keyframe = !GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT);
+    g_print ("Buffer with ts %" GST_TIME_FORMAT " (keyframe=%d)\n",
+        GST_TIME_ARGS (GST_BUFFER_PTS (buf)), is_keyframe);
+
+    if (is_keyframe) {
+      g_print ("Letting buffer through and removing drop probe\n");
+      return GST_PAD_PROBE_REMOVE;
+    } else {
+      g_print ("Dropping buffer, wait for a keyframe.\n");
+      return GST_PAD_PROBE_DROP;
+    }
+  }
+}
+]]
+
 local function start_recording_cb(app)
 	log.warning("timeout, unblocking pad to start recording")
 	app.buffer_count=0
-	app.vrecq_src:add_probe(Gst.PadProbeType.BUFFER,function() return probe_drop_one_cb(app) end)
+	app.vrecq_src:add_probe(Gst.PadProbeType.BUFFER,function(...) return probe_drop_one_cb(app,...) end)
 	app.vrecq_src:remove_probe(app.vrecq_src_probe_id)
 	app.vrecq_src_probe_id=0
 	GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return stop_recording_cb(app) end)
