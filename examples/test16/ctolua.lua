@@ -45,12 +45,15 @@ end
 
 function push_eos_thread(app)
 	local peer=app.vrecq_src:get_peer()
-	log.warning(("pusing eos event on pad %s"):format(peer))
+	log.warning(("pushing eos event on pad %s:%s"):format(peer.parent.name,peer.name))
+	app.pipeline.message_forward=true
+	peer:send_event(Gst.Event.new_eos())
 end
 
 local function stop_recording_cb(app)
 	log.warning("stop recording")
 	app.vrecq_src_probe_id=app.vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,block_probe_cb,nil,nil)
+	push_eos_thread(app)
 	return false;
 end
 
