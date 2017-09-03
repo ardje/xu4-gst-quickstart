@@ -21,34 +21,7 @@ local function app_update_filesink_location(app)
 	log.warning(("Setting filesink to %s"):format(fn))
 	app.filesink.location=fn
 end
-local function bus_cb(app,bus, message)
-   if message.type.ERROR then
-      log.warning('Error:', message:parse_error().message)
-      app.loop:quit()
-   elseif message.type.EOS then
-      log.warning 'end of stream'
-      app.record_count=(app.record_count or 0) + 1
-	if app.record_count<5 then
-		GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return start_recording_cb(app) end)
-	else
-	      app.loop:quit()
-	end
-   elseif message.type.STATE_CHANGED then
-      local old, new, pending = message:parse_state_changed()
-      log.warning(string.format('state changed: %s->%s:%s %s', old, new, pending,bus))
-   elseif message.type.ELEMENT then
-	log.warning 'message'
-   elseif message.type.TAG then
-      message:parse_tag():foreach(
-	 function(list, tag)
-	    log.warning(('tag: %s = %s'):format(tag, tostring(list:get(tag))))
-	 end)
-   end
-
-   return true
-end
-
-function push_eos_thread(app)
+local function push_eos_thread(app)
 	local peer=app.vrecq_src:get_peer()
 	log.warning(("pushing eos event on pad %s:%s"):format(peer.parent.name,peer.name))
 	app.pipeline.message_forward=true
@@ -118,6 +91,40 @@ local function start_recording_cb(app)
 	GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return stop_recording_cb(app) end)
 	return false;
 end
+
+local function bus_cb(app,bus, message)
+   if message.type.ERROR then
+      log.warning('Error:', message:parse_error().message)
+      app.loop:quit()
+   elseif message.type.EOS then
+      log.warning 'end of stream'
+	log.warning(message)
+      app.record_count=(app.record_count or 0) + 1
+	if app.record_count<5 then
+		app.filesink.state='NULL'
+		app.muxer.state='NULL'
+		app_update_filesink_location(app)
+		app.filesink.state='PLAYING'
+		app.muxer.state='PLAYING'
+		GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return start_recording_cb(app) end)
+	else
+	      app.loop:quit()
+	end
+   elseif message.type.STATE_CHANGED then
+      local old, new, pending = message:parse_state_changed()
+      log.warning(string.format('state changed: %s->%s:%s %s', old, new, pending,bus))
+   elseif message.type.ELEMENT then
+	log.warning 'message'
+   elseif message.type.TAG then
+      message:parse_tag():foreach(
+	 function(list, tag)
+	    log.warning(('tag: %s = %s'):format(tag, tostring(list:get(tag))))
+	 end)
+   end
+
+   return true
+end
+
 
 local function main()
 	local app={}
