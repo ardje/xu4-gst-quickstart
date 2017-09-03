@@ -44,12 +44,8 @@ local function probe_drop_one_cb(app,pad,info)
 	app.buffer_count=app.buffer_count+1
 	local buffer=info:get_buffer()
 	local buffer_flags=buffer:get_flags()
-  	-- if (app->buffer_count++ == 0) {
-	for k,v in pairs(buffer:get_flags()) do
-		log.warning(("%s:%s"):format(k,v))
-	end
 	if app.buffer_count==1 then
-		log.warning"drop one buffer"
+		log.warning("drop one buffer: %d",buffer.pts)
     		-- g_print ("Drop one buffer with ts %" GST_TIME_FORMAT "\n",
 		--         GST_TIME_ARGS (GST_BUFFER_PTS (info->data)));
     		-- return GST_PAD_PROBE_DROP;
@@ -58,7 +54,7 @@ local function probe_drop_one_cb(app,pad,info)
 	--  } else {
 	--    gboolean is_keyframe;
 		if buffer_flags.DELTA_UNIT then
-			log.warning"Waiting for keyframe"
+			--log.warning"Waiting for keyframe"
 			return PROBE_DROP
 		else
 			log.warning"Found keyframe"
@@ -98,7 +94,6 @@ local function bus_cb(app,bus, message)
       app.loop:quit()
    elseif message.type.EOS then
       log.warning 'end of stream'
-	log.warning(message)
       app.record_count=(app.record_count or 0) + 1
 	if app.record_count<5 then
 		app.filesink.state='NULL'
