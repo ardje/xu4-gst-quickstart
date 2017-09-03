@@ -27,7 +27,12 @@ local function bus_cb(app,bus, message)
       app.loop:quit()
    elseif message.type.EOS then
       log.warning 'end of stream'
-      --app.loop:quit()
+      app.record_count=(app.record_count or 0) + 1
+	if app.record_count<5 then
+		GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 15, function() return start_recording_cb(app) end)
+	else
+	      app.loop:quit()
+	end
    elseif message.type.STATE_CHANGED then
       local old, new, pending = message:parse_state_changed()
       log.warning(string.format('state changed: %s->%s:%s %s', old, new, pending,bus))
