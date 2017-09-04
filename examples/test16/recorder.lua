@@ -3,6 +3,7 @@ local lgi = require 'lgi'
 local GLib = lgi.GLib
 local Gst = lgi.Gst
 local log=lgi.log.domain'encodertest'
+local config=require"config"
 
 --local main_loop = GLib.MainLoop()
 local web={}
@@ -22,6 +23,9 @@ end
 function M:block_probe(pad, _)
 	log.warning("pad blocked")
 	log.warning(("pad %s:%s blocked"):format(pad.parent.name,pad.name))
+	if self.stopping then
+		self:push_eos()
+	end
 	return PROBE_OK
 end
 
@@ -88,11 +92,12 @@ function M:setup(app,server)
 	self.app=app
 	local me=self
 	local pipeline = Gst.parse_launch(
+		config.launch or
 		"v4l2src do-timestamp=true \z
 		! video/x-raw, format=YUY2,framerate=60/1, width=1280, height=720 \z
 		! v4l2video30convert \z
-		! video/x-raw,format=NV12,width=1280,height=72 \z
-		! v4l2video11h264enc extra-contols=\"encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304\" \z
+		! video/x-raw,format=NV12,width=1280,height=720 \z
+		! v4l2video11h264enc extra-controls=\"encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304\" \z
 		! h264parse \z
 		! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
 	      nil)
@@ -146,9 +151,9 @@ end
 function M:stop()
 	if self.recording then
 		log.warning("stop recording")
+		self.stopping=true
 		self:block()
 		-- maybe we should push_eos after the block probe reports blocked?
-		self:push_eos()
 		self.recording=false
 	end
 end
