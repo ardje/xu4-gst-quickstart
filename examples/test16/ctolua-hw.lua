@@ -10,7 +10,14 @@ local VIDEO_CAPS="video/x-raw,width=640,height=480,format=I420,framerate=25/1"
 local PROBE_OK=Gst.PadProbeReturn.OK
 local PROBE_REMOVE=Gst.PadProbeReturn.REMOVE
 local PROBE_DROP=Gst.PadProbeReturn.DROP
-local function block_probe_cb(pad, info)
+local function push_eos_thread(app)
+	local peer=app.vrecq_src:get_peer()
+	log.warning(("pushing eos event on pad %s:%s"):format(peer.parent.name,peer.name))
+	app.pipeline.message_forward=true
+	peer:send_event(Gst.Event.new_eos())
+end
+
+local function block_probe_cb(app,pad, info)
 	log.warning("pad blocked")
 	log.warning(("pad %s:%s blocked"):format(pad.parent.name,pad.name))
 	if app.stopping then
@@ -25,17 +32,10 @@ local function app_update_filesink_location(app)
 	log.warning(("Setting filesink to %s"):format(fn))
 	app.filesink.location=fn
 end
-local function push_eos_thread(app)
-	local peer=app.vrecq_src:get_peer()
-	log.warning(("pushing eos event on pad %s:%s"):format(peer.parent.name,peer.name))
-	app.pipeline.message_forward=true
-	peer:send_event(Gst.Event.new_eos())
-end
-
 local function stop_recording_cb(app)
 	log.warning("stop recording")
 	app.stopping=true
-	app.vrecq_src_probe_id=app.vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,block_probe_cb,nil,nil)
+	app.vrecq_src_probe_id=app.vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,function(...) return block_probe_cb(app,...) end,nil,nil)
 	--push_eos_thread(app)
 	return false;
 end
@@ -133,7 +133,7 @@ local function main()
 		"v4l2src do-timestamp=true \z
 		! video/x-raw, format=YUY2,framerate=60/1, width=1280, height=720 \z
 		! v4l2video30convert \z
-		! video/x-raw,format=NV12,width=1280,height=72 \z
+		! video/x-raw,format=NV12,width=1280,height=720 \z
 		! v4l2video11h264enc extra-contols=\"encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304\" \z
 		! h264parse \z
 		! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
@@ -152,7 +152,7 @@ local function main()
 	app.vrecq_src=vrecq_src
 	print(vrecq_src)
 	print(Gst.PadProbeType.BLOCK)
-	local vrecq_src_probe_id=vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,block_probe_cb)
+	local vrecq_src_probe_id=vrecq_src:add_probe(Gst.PadProbeType.BLOCK+Gst.PadProbeType.BUFFER,function(...) return block_probe_cb(app,...) end)
 	print(vrecq_src_probe_id)
 	app.vrecq_src_probe_id=vrecq_src_probe_id
 	app.chunk_count=0
