@@ -71,13 +71,11 @@ function M:bus_callback(_, message)
 	elseif message.type.STATE_CHANGED then
 		local old, new, pending = message:parse_state_changed()
 			log.warning(string.format('state changed: %s->%s:%s', old, new, pending))
-		elseif message.type.TAG then
+	elseif message.type.TAG then
 			message:parse_tag():foreach(
 				function(list, tag)
 				log.warning(('tag: %s = %s'):format(tag, tostring(list:get(tag))))
 			end)
-		else
-		log.warning("bus callback")
 	end
 	return true
 end
@@ -95,6 +93,7 @@ function M:setup(app,server)
 		! v4l2video30convert \z
 		! video/x-raw,format=NV12,width=1280,height=72 \z
 		! v4l2video11h264enc extra-contols=\"encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304\" \z
+		! h264parse \z
 		! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
 	      nil)
 		
@@ -107,14 +106,13 @@ function M:setup(app,server)
 	vrecq.max_size_bytes=0
 	vrecq.max_size_buffers=0
 	vrecq.leaky=2
-	local vrecq_src=app.vrecq:get_static_pad"src"
-	self.vrecq_src=vrecq_src
+	self.vrecq_src=vrecq:get_static_pad"src"
 	self:block()
 	self.chunk_count=0
 	self.sink=pipeline:get_by_name"filesink"
 	self:update_filename()
 	self.mux=pipeline:get_by_name"mux"
-	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, wrap(self,"bus_cb"))
+	pipeline.bus:add_watch(GLib.PRIORITY_DEFAULT, wrap(self,"bus_callback"))
 	pipeline.state='PLAYING'
 	--pipeline.message_forward = true
 	server:add_handler('/recorder', function(s, msg, path, query, ctx) -- luacheck: no unused args
