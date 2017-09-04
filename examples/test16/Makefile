@@ -1,6 +1,6 @@
 ALL: ctest gst.txt
-CFLAGS=$(shell pkg-config --cflags gstreamer-1.0)
-LFLAGS=$(shell pkg-config --libs gstreamer-1.0)
+CFLAGS=$(shell pkg-config --cflags gstreamer-1.0 libsoup-2.4)
+LFLAGS=$(shell pkg-config --libs gstreamer-1.0 libsoup-2.4)
 
 ctest: test-backlog-recording-h264-test.c
 	cc -o ctest $(CFLAGS) test-backlog-recording-h264-test.c $(LFLAGS) 
