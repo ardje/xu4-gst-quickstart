@@ -156,15 +156,15 @@ function M:cleanup()
 	self.pipeline.state='NULL'
 end
 web["/recorder/stop"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
-	M:stop()
 	log.warning("stop")
+	M:stop()
 	msg.status_code=200
 	msg.response_body:complete()
 	return true
 end
 web["/recorder/start"]=function(r,s,msg,path,query,ctx) -- luacheck: no unused args
+	log.warning("start")
 	M:start()
-	log.warning("stop")
 	msg.status_code=200
 	msg.response_body:complete()
 	return true
