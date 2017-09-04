@@ -38,6 +38,7 @@
  */
 #include <gst/gst.h>
 #include <libsoup/soup.h>
+#include <string.h>
 
 #define VIDEO_CAPS "video/x-raw,width=1920,height=1080,format=YUY2,framerate=30/1"
 
@@ -208,7 +209,7 @@ start_callback (SoupServer        *server,
                  SoupClientContext *client,
                  gpointer           user_data)
 {
-    RecordApp *server_data = user_data;
+    RecordApp *app = user_data;
     const char *mime_type;
     const char *body;
 
@@ -222,7 +223,7 @@ start_callback (SoupServer        *server,
     body = "OK";
 
     g_print ("Start recording\n");
-    start_recording_cb (server_data);
+    start_recording_cb (app);
 
     g_print ("Sending status OK with body text/html: OK\n");
     soup_message_set_status (msg, SOUP_STATUS_OK);
@@ -238,9 +239,9 @@ stop_callback (SoupServer        *server,
                  SoupClientContext *client,
                  gpointer           user_data)
 {
-    RecordApp *server_data = user_data;
+    RecordApp *app = user_data;
     const char *mime_type;
-    const char *body;
+    gchar *loc;
 
     g_print ("In stop_callback\n");
     if (msg->method != SOUP_METHOD_GET) {
@@ -248,16 +249,18 @@ stop_callback (SoupServer        *server,
         return;
     }
 
+    g_object_get (app->filesink, "location", &loc, NULL);
+
     mime_type = "text/html";
-    body = "OK";
 
     g_print ("Sop recording\n");
-    stop_recording_cb (server_data);
+    stop_recording_cb (app);
 
     g_print ("Sending status OK with body text/html: OK\n");
     soup_message_set_status (msg, SOUP_STATUS_OK);
     soup_message_set_response (msg, mime_type, SOUP_MEMORY_COPY,
-                               body, 2);
+                               loc, strlen(loc));
+    g_free(loc);
 }
 
 int
