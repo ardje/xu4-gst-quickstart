@@ -26,12 +26,6 @@ function app:on_activate() -- luacheck: no unused args
       s:quit()
       app:release()
    end)
-   server:add_handler('/recorder', function(s, msg, path, query, ctx) -- luacheck: no unused args
-      msg.status_code = 200
-      msg.response_body:complete()
-      s:quit()
-      app:release()
-   end)
 
    -- Start the server running asynchronously.
    server:run_async()
