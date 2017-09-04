@@ -39,7 +39,7 @@
 #include <gst/gst.h>
 #include <libsoup/soup.h>
 
-#define VIDEO_CAPS "video/x-raw,width=640,height=480,format=I420,framerate=25/1"
+#define VIDEO_CAPS "video/x-raw,width=1920,height=1080,format=YUY2,framerate=30/1"
 
 typedef struct
 {
@@ -269,8 +269,10 @@ main (int argc, char **argv)
   gst_init (NULL, NULL);
 
   app.pipeline =
-      gst_parse_launch ("videotestsrc is-live=true ! " VIDEO_CAPS
-      " ! clockoverlay ! x264enc tune=zerolatency bitrate=8000 "
+      gst_parse_launch ("v4l2src device=/dev/video0 is-live=true ! " VIDEO_CAPS
+      " ! videoconvert "
+      " ! x264enc "
+      " ! video/x-h264,profile=baseline ! h264parse config-interval=2 "
       " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
       NULL);
 
