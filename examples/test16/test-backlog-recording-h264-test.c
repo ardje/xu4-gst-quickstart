@@ -37,6 +37,7 @@
  * audio before the first video frame.
  */
 #include <gst/gst.h>
+#include <libsoup/soup.h>
 
 #define VIDEO_CAPS "video/x-raw,width=640,height=480,format=I420,framerate=25/1"
 
@@ -50,6 +51,7 @@ typedef struct
   gulong vrecq_src_probe_id;
   guint buffer_count;
   guint chunk_count;
+  SoupServer *server;
 } RecordApp;
 
 static gboolean start_recording_cb (gpointer user_data);
@@ -91,7 +93,7 @@ bus_cb (GstBus * bus, GstMessage * msg, gpointer user_data)
           gst_element_set_state (app->filesink, GST_STATE_PLAYING);
           gst_element_set_state (app->muxer, GST_STATE_PLAYING);
           /* do another recording in 10 secs time */
-          g_timeout_add_seconds (10, start_recording_cb, app);
+          //g_timeout_add_seconds (10, start_recording_cb, app);
         }
         gst_message_unref (forward_msg);
       }
@@ -193,15 +195,76 @@ start_recording_cb (gpointer user_data)
   gst_pad_remove_probe (app->vrecq_src, app->vrecq_src_probe_id);
   app->vrecq_src_probe_id = 0;
 
-  g_timeout_add_seconds (5, stop_recording_cb, app);
+  //g_timeout_add_seconds (5, stop_recording_cb, app);
 
   return FALSE;                 /* don't call us again */
+}
+
+static void
+start_callback (SoupServer        *server,
+                 SoupMessage       *msg,
+                 const char        *path,
+                 GHashTable        *query,
+                 SoupClientContext *client,
+                 gpointer           user_data)
+{
+    RecordApp *server_data = user_data;
+    const char *mime_type;
+    const char *body;
+
+    g_print ("In start_callback\n");
+    if (msg->method != SOUP_METHOD_GET) {
+        soup_message_set_status (msg, SOUP_STATUS_NOT_IMPLEMENTED);
+        return;
+    }
+
+    mime_type = "text/html";
+    body = "OK";
+
+    g_print ("Start recording\n");
+    start_recording_cb (server_data);
+
+    g_print ("Sending status OK with body text/html: OK\n");
+    soup_message_set_status (msg, SOUP_STATUS_OK);
+    soup_message_set_response (msg, mime_type, SOUP_MEMORY_COPY,
+                               body, 2);
+}
+
+static void
+stop_callback (SoupServer        *server,
+                 SoupMessage       *msg,
+                 const char        *path,
+                 GHashTable        *query,
+                 SoupClientContext *client,
+                 gpointer           user_data)
+{
+    RecordApp *server_data = user_data;
+    const char *mime_type;
+    const char *body;
+
+    g_print ("In stop_callback\n");
+    if (msg->method != SOUP_METHOD_GET) {
+        soup_message_set_status (msg, SOUP_STATUS_NOT_IMPLEMENTED);
+        return;
+    }
+
+    mime_type = "text/html";
+    body = "OK";
+
+    g_print ("Sop recording\n");
+    stop_recording_cb (server_data);
+
+    g_print ("Sending status OK with body text/html: OK\n");
+    soup_message_set_status (msg, SOUP_STATUS_OK);
+    soup_message_set_response (msg, mime_type, SOUP_MEMORY_COPY,
+                               body, 2);
 }
 
 int
 main (int argc, char **argv)
 {
   RecordApp app;
+  GError *error = NULL;
 
   gst_init (NULL, NULL);
 
@@ -230,7 +293,13 @@ main (int argc, char **argv)
   app.loop = g_main_loop_new (NULL, FALSE);
   gst_bus_add_watch (GST_ELEMENT_BUS (app.pipeline), bus_cb, &app);
 
-  g_timeout_add_seconds (10, start_recording_cb, &app);
+  //g_timeout_add_seconds (10, start_recording_cb, &app);
+
+  app.server = soup_server_new (SOUP_SERVER_SERVER_HEADER, "recorder ", NULL);
+  soup_server_listen_all (app.server, 9620, 0, &error);
+  soup_server_add_handler (app.server, "/start", start_callback, &app, NULL);
+  soup_server_add_handler (app.server, "/stop", stop_callback, &app, NULL);
+  g_print ("Listening on port 9620...\n");
 
   g_main_loop_run (app.loop);
 
