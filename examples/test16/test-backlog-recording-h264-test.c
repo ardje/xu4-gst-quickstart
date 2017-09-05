@@ -274,7 +274,7 @@ main (int argc, char **argv)
   app.pipeline =
       gst_parse_launch ("v4l2src device=/dev/video0 is-live=true ! " VIDEO_CAPS
       " ! videoconvert "
-      " ! x264enc key-int-max=2 "
+      " ! x264enc key-int-max=10 "
       " ! video/x-h264,profile=baseline ! h264parse config-interval=2 "
       " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
       NULL);
