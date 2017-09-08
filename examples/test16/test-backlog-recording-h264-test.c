@@ -53,6 +53,7 @@ typedef struct
   guint buffer_count;
   guint chunk_count;
   SoupServer *server;
+  guint stopping;
 } RecordApp;
 
 static gboolean start_recording_cb (gpointer user_data);
@@ -134,16 +135,6 @@ probe_drop_one_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
   }
 }
 
-static GstPadProbeReturn
-block_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
-{
-  g_print ("pad %s:%s blocked!\n", GST_DEBUG_PAD_NAME (pad));
-  g_assert ((info->type & GST_PAD_PROBE_TYPE_BUFFER) ==
-      GST_PAD_PROBE_TYPE_BUFFER);
-  /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
-  return GST_PAD_PROBE_OK;
-}
-
 static gpointer
 push_eos_thread (gpointer user_data)
 {
@@ -163,6 +154,23 @@ push_eos_thread (gpointer user_data)
   return NULL;
 }
 
+static GstPadProbeReturn
+block_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RecordApp *app = user_data;
+  g_print ("pad %s:%s blocked!\n", GST_DEBUG_PAD_NAME (pad));
+  g_assert ((info->type & GST_PAD_PROBE_TYPE_BUFFER) ==
+      GST_PAD_PROBE_TYPE_BUFFER);
+  /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
+
+  if(app->stopping == 1) {
+    g_print ("Starting eos-push-thread\n");
+    g_thread_new ("eos-push-thread", push_eos_thread, app);
+  }
+
+  return GST_PAD_PROBE_OK;
+}
+
 static gboolean
 stop_recording_cb (gpointer user_data)
 {
@@ -172,9 +180,9 @@ stop_recording_cb (gpointer user_data)
 
   app->vrecq_src_probe_id = gst_pad_add_probe (app->vrecq_src,
       GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_probe_cb,
-      NULL, NULL);
+      app, NULL);
 
-  g_thread_new ("eos-push-thread", push_eos_thread, app);
+  app->stopping = 1;
 
   return FALSE;                 /* don't call us again */
 }
@@ -286,7 +294,7 @@ main (int argc, char **argv)
   app.vrecq_src = gst_element_get_static_pad (app.vrecq, "src");
   app.vrecq_src_probe_id = gst_pad_add_probe (app.vrecq_src,
       GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_probe_cb,
-      NULL, NULL);
+      &app, NULL);
 
   app.chunk_count = 0;
   app.filesink = gst_bin_get_by_name (GST_BIN (app.pipeline), "filesink");
@@ -300,6 +308,7 @@ main (int argc, char **argv)
 
   //g_timeout_add_seconds (10, start_recording_cb, &app);
 
+  app.stopping = 0;
   app.server = soup_server_new (SOUP_SERVER_SERVER_HEADER, "recorder ", NULL);
   soup_server_listen_all (app.server, 9620, 0, &error);
   soup_server_add_handler (app.server, "/start", start_callback, &app, NULL);
