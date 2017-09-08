@@ -40,7 +40,7 @@
 #include <libsoup/soup.h>
 #include <string.h>
 
-#define VIDEO_CAPS "video/x-raw,width=1920,height=1080,format=YUY2,framerate=30/1"
+#define VIDEO_CAPS "video/x-raw, format=YUY2,width=1280,height=720,framerate=30/1"
 
 typedef struct
 {
@@ -272,10 +272,10 @@ main (int argc, char **argv)
   gst_init (NULL, NULL);
 
   app.pipeline =
-      gst_parse_launch ("v4l2src device=/dev/video0 is-live=true ! " VIDEO_CAPS
-      " ! videoconvert "
-      " ! x264enc key-int-max=10 "
-      " ! video/x-h264,profile=baseline ! h264parse config-interval=2 "
+      gst_parse_launch ("v4l2src device=/dev/video0 do-timestamp=true ! " VIDEO_CAPS
+      " ! v4l2video30convert ! video/x-raw, format=NV12 "
+      " ! v4l2video11h264enc extra-controls=encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304 "
+      " ! h264parse config-interval=2 "
       " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
       NULL);
 
