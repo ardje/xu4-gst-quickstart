@@ -164,8 +164,10 @@ block_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
   /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
 
   if(app->stopping == 1) {
+    GThread *thread;
     g_print ("Starting eos-push-thread\n");
-    g_thread_new ("eos-push-thread", push_eos_thread, app);
+    thread = g_thread_new ("eos-push-thread", push_eos_thread, app);
+    g_thread_unref(thread);
   }
 
   return GST_PAD_PROBE_OK;
