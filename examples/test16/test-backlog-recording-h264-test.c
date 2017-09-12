@@ -39,8 +39,8 @@
 #include <gst/gst.h>
 #include <libsoup/soup.h>
 #include <string.h>
+#include <stdlib.h>
 
-#define VIDEO_CAPS "video/x-raw, format=YUY2,width=1280,height=720,framerate=30/1"
 
 typedef struct
 {
@@ -54,6 +54,8 @@ typedef struct
   guint chunk_count;
   SoupServer *server;
   guint stopping;
+  gchar *file_format;
+  guint file_modulo;
 } RecordApp;
 
 static gboolean start_recording_cb (gpointer user_data);
@@ -63,9 +65,12 @@ app_update_filesink_location (RecordApp * app)
 {
   gchar *fn;
 
-  fn = g_strdup_printf ("/var/tmp/test-%03d.mp4", app->chunk_count++);
+  fn = g_strdup_printf (app->file_format, app->chunk_count);
   g_print ("Setting filesink location to '%s'\n", fn);
   g_object_set (app->filesink, "location", fn, NULL);
+
+  // Set file location for next run
+  app->chunk_count = (app->chunk_count + 1) % app->file_modulo;
   g_free (fn);
 }
 
@@ -281,13 +286,21 @@ main (int argc, char **argv)
 
   gst_init (NULL, NULL);
 
-  app.pipeline =
-      gst_parse_launch ("v4l2src device=/dev/video0 do-timestamp=true ! " VIDEO_CAPS
+  if (argc == 4) {
+    app.file_format = argv[1];
+    app.file_modulo = atoi(argv[2]);
+    app.pipeline = gst_parse_launch (argv[3], NULL);
+  } else {
+    app.file_format = "/var/tmp/test-%03d.mp4";
+    app.file_modulo = 500;
+    app.pipeline = gst_parse_launch ("v4l2src device=/dev/video0 do-timestamp=true "
+      " ! video/x-raw, format=YUY2,width=1280,height=720,framerate=30/1 "
       " ! v4l2video30convert ! video/x-raw, format=NV12 "
       " ! v4l2video11h264enc extra-controls=encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304 "
       " ! h264parse config-interval=2 "
       " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
       NULL);
+  }
 
   app.vrecq = gst_bin_get_by_name (GST_BIN (app.pipeline), "vrecq");
   g_object_set (app.vrecq, "max-size-time", (guint64) 3 * GST_SECOND,
