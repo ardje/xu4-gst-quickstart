@@ -44,12 +44,14 @@
 
 typedef struct
 {
-  GstElement *pipeline, *vrecq;
+  GstElement *pipeline, *vrecq, *arecq;
   GstElement *filesink;
   GstElement *muxer;
   GMainLoop *loop;
   GstPad *vrecq_src;
+  GstPad *arecq_src;
   gulong vrecq_src_probe_id;
+  gulong arecq_src_probe_id;
   guint buffer_count;
   guint chunk_count;
   SoupServer *server;
@@ -80,10 +82,18 @@ bus_cb (GstBus * bus, GstMessage * msg, gpointer user_data)
   RecordApp *app = user_data;
 
   switch (GST_MESSAGE_TYPE (msg)) {
-    case GST_MESSAGE_ERROR:
-      g_printerr ("Error!\n");
-      g_main_loop_quit (app->loop);
+    case GST_MESSAGE_ERROR: {
+      GError *err = NULL;
+      gchar *dbg_info = NULL;
+
+      gst_message_parse_error (msg, &err, &dbg_info);
+      g_printerr ("ERROR from element %s: %s\n",
+          GST_OBJECT_NAME (msg->src), err->message);
+      g_printerr ("Debugging info: %s\n", (dbg_info) ? dbg_info : "none");
+      g_error_free (err);
+      g_free (dbg_info);
       return FALSE;
+    }
     case GST_MESSAGE_ELEMENT:{
       const GstStructure *s = gst_message_get_structure (msg);
 
@@ -132,6 +142,8 @@ probe_drop_one_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
 
     if (is_keyframe) {
       g_print ("Letting buffer through and removing drop probe\n");
+      gst_pad_remove_probe (app->arecq_src, app->arecq_src_probe_id);
+      app->arecq_src_probe_id = 0;
       return GST_PAD_PROBE_REMOVE;
     } else {
       g_print ("Dropping buffer, wait for a keyframe.\n");
@@ -159,11 +171,30 @@ push_eos_thread (gpointer user_data)
   return NULL;
 }
 
-static GstPadProbeReturn
-block_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+static gpointer
+push_audio_eos_thread (gpointer user_data)
 {
   RecordApp *app = user_data;
-  g_print ("pad %s:%s blocked!\n", GST_DEBUG_PAD_NAME (pad));
+  GstPad *peer;
+
+  peer = gst_pad_get_peer (app->arecq_src);
+  g_print ("pushing audio EOS event on pad %s:%s\n", GST_DEBUG_PAD_NAME (peer));
+
+  /* tell pipeline to forward EOS message from filesink immediately and not
+   * hold it back until it also got an EOS message from the video sink */
+  g_object_set (app->pipeline, "message-forward", TRUE, NULL);
+
+  gst_pad_send_event (peer, gst_event_new_eos ());
+  gst_object_unref (peer);
+
+  return NULL;
+}
+
+static GstPadProbeReturn
+block_video_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RecordApp *app = user_data;
+  g_print ("video pad %s:%s blocked!\n", GST_DEBUG_PAD_NAME (pad));
   g_assert ((info->type & GST_PAD_PROBE_TYPE_BUFFER) ==
       GST_PAD_PROBE_TYPE_BUFFER);
   /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
@@ -178,6 +209,24 @@ block_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
   return GST_PAD_PROBE_OK;
 }
 
+static GstPadProbeReturn
+block_audio_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RecordApp *app = user_data;
+  g_print ("audio pad %s:%s blocked!\n", GST_DEBUG_PAD_NAME (pad));
+  g_assert ((info->type & GST_PAD_PROBE_TYPE_BUFFER) ==
+      GST_PAD_PROBE_TYPE_BUFFER);
+  /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
+
+  if(app->stopping == 1) {
+    GThread *thread;
+    g_print ("Starting eos-audio-push-thread\n");
+    thread = g_thread_new ("eos-audio-push-thread", push_audio_eos_thread, app);
+    g_thread_unref(thread);
+  }
+  return GST_PAD_PROBE_OK;
+}
+
 static gboolean
 stop_recording_cb (gpointer user_data)
 {
@@ -185,9 +234,15 @@ stop_recording_cb (gpointer user_data)
 
   g_print ("stop recording\n");
 
-  app->vrecq_src_probe_id = gst_pad_add_probe (app->vrecq_src,
-      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_probe_cb,
+  app->arecq_src_probe_id = gst_pad_add_probe (app->arecq_src,
+      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
       app, NULL);
+  app->vrecq_src_probe_id = gst_pad_add_probe (app->vrecq_src,
+      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_video_probe_cb,
+      app, NULL);
+
+  g_print ("vrecq_src_probe_id = %lu \n", app->vrecq_src_probe_id);
+  g_print ("arecq_src_probe_id = %lu \n", app->arecq_src_probe_id);
 
   app->stopping = 1;
 
@@ -298,7 +353,7 @@ main (int argc, char **argv)
       " ! v4l2video30convert ! video/x-raw, format=NV12 "
       " ! v4l2video11h264enc extra-controls=encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304 "
       " ! h264parse config-interval=2 "
-      " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink",
+      " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink alsasrc device=hw:1 do-timestamp=true ! audioconvert ! lamemp3enc ! queue name=arecq ! mux. ",
       NULL);
   }
 
@@ -306,9 +361,18 @@ main (int argc, char **argv)
   g_object_set (app.vrecq, "max-size-time", (guint64) 3 * GST_SECOND,
       "max-size-bytes", 0, "max-size-buffers", 0, "leaky", 2, NULL);
 
+  app.arecq = gst_bin_get_by_name (GST_BIN (app.pipeline), "arecq");
+  g_object_set (app.arecq, "max-size-time", (guint64) 3 * GST_SECOND,
+      "max-size-bytes", 0, "max-size-buffers", 0, "leaky", 2, NULL);
+
   app.vrecq_src = gst_element_get_static_pad (app.vrecq, "src");
   app.vrecq_src_probe_id = gst_pad_add_probe (app.vrecq_src,
-      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_probe_cb,
+      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_video_probe_cb,
+      &app, NULL);
+
+  app.arecq_src = gst_element_get_static_pad (app.arecq, "src");
+  app.arecq_src_probe_id = gst_pad_add_probe (app.arecq_src,
+      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
       &app, NULL);
 
   app.chunk_count = 0;
