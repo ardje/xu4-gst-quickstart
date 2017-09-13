@@ -54,11 +54,12 @@ typedef struct
   guint chunk_count;
   SoupServer *server;
   guint stopping;
+  guint restart;
   gchar *file_format;
   guint file_modulo;
 } RecordApp;
 
-static gboolean start_recording_cb (gpointer user_data);
+static void start_recording_cb (gpointer user_data);
 
 static void
 app_update_filesink_location (RecordApp * app)
@@ -99,8 +100,12 @@ bus_cb (GstBus * bus, GstMessage * msg, gpointer user_data)
           app_update_filesink_location (app);
           gst_element_set_state (app->filesink, GST_STATE_PLAYING);
           gst_element_set_state (app->muxer, GST_STATE_PLAYING);
-          /* do another recording in 10 secs time */
-          //g_timeout_add_seconds (10, start_recording_cb, app);
+          app->stopping = 0;
+          if (app->restart == 1) {
+            g_print ("restart recording\n");
+            start_recording_cb (app);
+            app->restart = 0;
+          }
         }
         gst_message_unref (forward_msg);
       }
@@ -194,12 +199,12 @@ stop_recording_cb (gpointer user_data)
   return FALSE;                 /* don't call us again */
 }
 
-static gboolean
+static void
 start_recording_cb (gpointer user_data)
 {
   RecordApp *app = user_data;
 
-  g_print ("timeout, unblocking pad to start recording\n");
+  g_print ("unblocking pad to start recording\n");
 
   /* need to hook up another probe to drop the initial old buffer stuck
    * in the blocking pad probe */
@@ -210,10 +215,6 @@ start_recording_cb (gpointer user_data)
   /* now remove the blocking probe to unblock the pad */
   gst_pad_remove_probe (app->vrecq_src, app->vrecq_src_probe_id);
   app->vrecq_src_probe_id = 0;
-
-  //g_timeout_add_seconds (5, stop_recording_cb, app);
-
-  return FALSE;                 /* don't call us again */
 }
 
 static void
@@ -237,8 +238,13 @@ start_callback (SoupServer        *server,
     mime_type = "text/html";
     body = "OK";
 
-    g_print ("Start recording\n");
-    start_recording_cb (app);
+    if (app->stopping == 0) {
+      // only start if we're not busy stopping
+      g_print ("Start recording\n");
+      start_recording_cb (app);
+    } else {
+      app->restart = 1;
+    }
 
     g_print ("Sending status OK with body text/html: OK\n");
     soup_message_set_status (msg, SOUP_STATUS_OK);
@@ -321,9 +327,8 @@ main (int argc, char **argv)
   app.loop = g_main_loop_new (NULL, FALSE);
   gst_bus_add_watch (GST_ELEMENT_BUS (app.pipeline), bus_cb, &app);
 
-  //g_timeout_add_seconds (10, start_recording_cb, &app);
-
   app.stopping = 0;
+  app.restart = 0;
   app.server = soup_server_new (SOUP_SERVER_SERVER_HEADER, "recorder ", NULL);
   soup_server_listen_all (app.server, 9620, 0, &error);
   soup_server_add_handler (app.server, "/start", start_callback, &app, NULL);
