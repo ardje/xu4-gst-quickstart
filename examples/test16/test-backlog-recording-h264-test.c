@@ -52,7 +52,8 @@ typedef struct
   GstPad *arecq_src;
   gulong vrecq_src_probe_id;
   gulong arecq_src_probe_id;
-  guint buffer_count;
+  guint video_buffer_count;
+  guint audio_buffer_count;
   guint chunk_count;
   SoupServer *server;
   guint stopping;
@@ -134,27 +135,43 @@ probe_drop_one_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
   RecordApp *app = user_data;
   GstBuffer *buf = info->data;
 
-  if (app->buffer_count++ == 0) {
-    g_print ("Drop one buffer with ts %" GST_TIME_FORMAT "\n",
+  if (app->video_buffer_count++ == 0) {
+    g_print ("Drop one video buffer with ts %" GST_TIME_FORMAT "\n",
         GST_TIME_ARGS (GST_BUFFER_PTS (info->data)));
     return GST_PAD_PROBE_DROP;
   } else {
     gboolean is_keyframe;
 
     is_keyframe = !GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_DELTA_UNIT);
-    g_print ("Buffer with ts %" GST_TIME_FORMAT " (keyframe=%d)\n",
+    g_print ("video buffer with ts %" GST_TIME_FORMAT " (keyframe=%d)\n",
         GST_TIME_ARGS (GST_BUFFER_PTS (buf)), is_keyframe);
 
     if (is_keyframe) {
-      g_print ("Letting buffer through and removing drop probe\n");
+      g_print ("Letting video buffer through and removing drop probe\n");
       gst_pad_remove_probe (app->arecq_src, app->arecq_src_probe_id);
       app->arecq_src_probe_id = 0;
       return GST_PAD_PROBE_REMOVE;
     } else {
-      g_print ("Dropping buffer, wait for a keyframe.\n");
+      g_print ("Dropping video buffer, wait for a keyframe.\n");
       return GST_PAD_PROBE_DROP;
     }
   }
+}
+
+static GstPadProbeReturn
+probe_audio_drop_one_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RecordApp *app = user_data;
+  GstBuffer *buf = info->data;
+
+  if (app->audio_buffer_count++ == 0) {
+    g_print ("Drop one audio buffer with ts %" GST_TIME_FORMAT "\n",
+        GST_TIME_ARGS (GST_BUFFER_PTS (info->data)));
+    return GST_PAD_PROBE_DROP;
+  }
+
+  g_print ("Letting audio buffer through and removing drop probe\n");
+  return GST_PAD_PROBE_REMOVE;
 }
 
 static gpointer
@@ -263,9 +280,12 @@ start_recording_cb (gpointer user_data)
 
   /* need to hook up another probe to drop the initial old buffer stuck
    * in the blocking pad probe */
-  app->buffer_count = 0;
+  app->video_buffer_count = 0;
+  app->audio_buffer_count = 0;
   gst_pad_add_probe (app->vrecq_src,
       GST_PAD_PROBE_TYPE_BUFFER, probe_drop_one_cb, app, NULL);
+  gst_pad_add_probe (app->arecq_src,
+      GST_PAD_PROBE_TYPE_BUFFER, probe_audio_drop_one_cb, app, NULL);
 
   /* now remove the blocking probe to unblock the pad */
   gst_pad_remove_probe (app->vrecq_src, app->vrecq_src_probe_id);
@@ -359,7 +379,7 @@ main (int argc, char **argv)
       " ! v4l2video30convert ! video/x-raw, format=NV12 "
       " ! v4l2video11h264enc extra-controls=encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304 "
       " ! h264parse config-interval=2 "
-      " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink alsasrc device=hw:1 do-timestamp=true ! audioconvert ! lamemp3enc ! queue name=arecq ! mux. ",
+      " ! queue name=vrecq ! mp4mux name=mux ! filesink async=false name=filesink alsasrc device=hw:2 do-timestamp=true ! audioconvert ! voaacenc ! queue name=arecq ! mux. ",
       NULL);
   }
 
