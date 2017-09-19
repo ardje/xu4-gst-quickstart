@@ -50,6 +50,7 @@ typedef struct
   GMainLoop *loop;
   GstPad *vrecq_src;
   GstPad *arecq_src;
+  GstPad *v4l2_src;
   gulong vrecq_src_probe_id;
   gulong arecq_src_probe_id;
   guint video_buffer_count;
@@ -60,6 +61,8 @@ typedef struct
   guint restart;
   gchar *file_format;
   guint file_modulo;
+  guint v4l2_monitor_timer;
+  guint v4l2_src_frame_cnt;
 } RecordApp;
 
 static void start_recording_cb (gpointer user_data);
@@ -127,6 +130,40 @@ bus_cb (GstBus * bus, GstMessage * msg, gpointer user_data)
   }
 
   return TRUE;
+}
+
+gboolean v4l2_src_monitor_timer_expired(gpointer user_data)
+{
+  RecordApp *app = user_data;
+
+  if(app->v4l2_src_frame_cnt > 0) {
+    GstClock *clk = gst_element_get_clock(app->pipeline);
+    g_print("%"  GST_TIME_FORMAT ": Received %u frames since last check\n", GST_TIME_ARGS(gst_clock_get_time(clk)), app->v4l2_src_frame_cnt);
+    gst_object_unref (clk);
+  } else {
+    g_print("Capturing data stopped :(\n");
+    g_print("Exit now..\n");
+    gst_element_set_state (app->pipeline, GST_STATE_NULL);
+    gst_object_unref (app->pipeline);
+    exit(0);
+  }
+
+  app->v4l2_src_frame_cnt = 0;
+
+  return TRUE;
+}
+
+static GstPadProbeReturn
+v4l2_src_monitor_probe (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  RecordApp *app = user_data;
+  if (app->v4l2_monitor_timer == 0) {
+    app->v4l2_monitor_timer = g_timeout_add_seconds(3, v4l2_src_monitor_timer_expired, app);
+  }
+
+  app->v4l2_src_frame_cnt++;
+
+  return GST_PAD_PROBE_OK;
 }
 
 static GstPadProbeReturn
@@ -374,7 +411,7 @@ main (int argc, char **argv)
   } else {
     app.file_format = "/var/tmp/test-%03d.mp4";
     app.file_modulo = 500;
-    app.pipeline = gst_parse_launch ("v4l2src device=/dev/video0 do-timestamp=true "
+    app.pipeline = gst_parse_launch ("v4l2src name=v4l2src device=/dev/video0 do-timestamp=true "
       " ! video/x-raw, format=YUY2,width=1280,height=720,framerate=30/1 "
       " ! v4l2video30convert ! video/x-raw, format=NV12 "
       " ! v4l2video11h264enc extra-controls=encode,h264_level=10,h264_profile=4,frame_level_rate_control_enable=1,video_bitrate=4194304 "
@@ -407,6 +444,11 @@ main (int argc, char **argv)
   app.arecq_src_probe_id = gst_pad_add_probe (app.arecq_src,
       GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
       &app, NULL);
+
+  app.v4l2_src = gst_element_get_static_pad(gst_bin_get_by_name (GST_BIN (app.pipeline), "v4l2src"), "src");
+  gst_pad_add_probe (app.v4l2_src, GST_PAD_PROBE_TYPE_BUFFER, v4l2_src_monitor_probe, &app, NULL);
+  app.v4l2_monitor_timer = 0;
+  app.v4l2_src_frame_cnt = 0;
 
   app.chunk_count = 0;
   app.filesink = gst_bin_get_by_name (GST_BIN (app.pipeline), "filesink");
