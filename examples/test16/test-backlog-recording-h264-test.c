@@ -41,6 +41,13 @@
 #include <string.h>
 #include <stdlib.h>
 
+// How many seconds after startup should be checked if the v4l2src
+// started receiving buffers.
+#define V4L2SRC_STARTUP_DELAY_MONITOR  25
+
+// At which interval we want to continue checking if the v4l2src
+// is still receiving buffers.
+#define V4L2SRC_MONITOR_TIMER_INTERVAL 3
 
 typedef struct
 {
@@ -61,7 +68,6 @@ typedef struct
   guint restart;
   gchar *file_format;
   guint file_modulo;
-  guint v4l2_monitor_timer;
   guint v4l2_src_frame_cnt;
 } RecordApp;
 
@@ -132,6 +138,15 @@ bus_cb (GstBus * bus, GstMessage * msg, gpointer user_data)
   return TRUE;
 }
 
+// It could happen that after a random time (sometimes few mintues,
+// sometimes few hours) the v4l2src is not receiving any new buffers
+// anymore.
+//
+// To check this, a monitor timer is used to simply count
+// the frames we received during the timer interval. If this value
+// is greater than 0, we're still receiving buffers. If not, exit
+// the application because if we're not receiving any buffers anymore,
+// it doesn't make sense to continue...
 gboolean v4l2_src_monitor_timer_expired(gpointer user_data)
 {
   RecordApp *app = user_data;
@@ -150,16 +165,49 @@ gboolean v4l2_src_monitor_timer_expired(gpointer user_data)
 
   app->v4l2_src_frame_cnt = 0;
 
-  return TRUE;
+  return TRUE; // Call us again after the next interval
 }
 
+// Function called after x seconds when the application is started.
+// The device I use for testing takes about 20 seconds to probe. This
+// function will be called when probing is over and after the first buffers
+// should already have been received.
+//
+// If this function is called and still no buffers were received from the
+// source, something went wrong and it doesn't make sense to continue so
+// then exit the application.
+gboolean startup_monitor(gpointer user_data)
+{
+  RecordApp *app = user_data;
+
+  if(app->v4l2_src_frame_cnt > 0) {
+    // Initial startup succeeded
+    GstClock *clk = gst_element_get_clock(app->pipeline);
+    g_print("%"  GST_TIME_FORMAT ": Received %u frames after startup\n", GST_TIME_ARGS(gst_clock_get_time(clk)), app->v4l2_src_frame_cnt);
+    gst_object_unref (clk);
+
+    // Start timer to periodically check for incoming buffers from v4l2src
+    g_timeout_add_seconds(V4L2SRC_MONITOR_TIMER_INTERVAL, v4l2_src_monitor_timer_expired, app);
+  } else {
+    g_print("No data after initial startup\n");
+    g_print("Exit now..\n");
+    gst_element_set_state (app->pipeline, GST_STATE_NULL);
+    gst_object_unref (app->pipeline);
+    exit(0);
+  }
+
+  app->v4l2_src_frame_cnt = 0;
+
+  return FALSE; // Don't call us anymore
+}
+
+// Buffer probe on the v4l2src element to count the incoming frames.
+// This counter is checked at a regular interval to check if we're
+// still receiving buffers on our source.
 static GstPadProbeReturn
 v4l2_src_monitor_probe (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
 {
   RecordApp *app = user_data;
-  if (app->v4l2_monitor_timer == 0) {
-    app->v4l2_monitor_timer = g_timeout_add_seconds(3, v4l2_src_monitor_timer_expired, app);
-  }
 
   app->v4l2_src_frame_cnt++;
 
@@ -427,29 +475,35 @@ main (int argc, char **argv)
       NULL);
   }
 
+  // Video queue
   app.vrecq = gst_bin_get_by_name (GST_BIN (app.pipeline), "vrecq");
   g_object_set (app.vrecq, "max-size-time", (guint64) 3 * GST_SECOND,
       "max-size-bytes", 0, "max-size-buffers", 0, "leaky", 2, NULL);
 
+  // Audio queue
   app.arecq = gst_bin_get_by_name (GST_BIN (app.pipeline), "arecq");
   g_object_set (app.arecq, "max-size-time", (guint64) 3 * GST_SECOND,
       "max-size-bytes", 0, "max-size-buffers", 0, "leaky", 2, NULL);
 
+  // Video queue source pad
   app.vrecq_src = gst_element_get_static_pad (app.vrecq, "src");
   app.vrecq_src_probe_id = gst_pad_add_probe (app.vrecq_src,
       GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_video_probe_cb,
       &app, NULL);
 
+  // Audio queue source pad
   app.arecq_src = gst_element_get_static_pad (app.arecq, "src");
   app.arecq_src_probe_id = gst_pad_add_probe (app.arecq_src,
       GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
       &app, NULL);
 
+  // Monitors to check if we are still receiving buffers on the v4l2src
   app.v4l2_src = gst_element_get_static_pad(gst_bin_get_by_name (GST_BIN (app.pipeline), "v4l2src"), "src");
   gst_pad_add_probe (app.v4l2_src, GST_PAD_PROBE_TYPE_BUFFER, v4l2_src_monitor_probe, &app, NULL);
-  app.v4l2_monitor_timer = 0;
   app.v4l2_src_frame_cnt = 0;
+  g_timeout_add_seconds(V4L2SRC_STARTUP_DELAY_MONITOR, startup_monitor, &app);
 
+  // Filesink
   app.chunk_count = 0;
   app.filesink = gst_bin_get_by_name (GST_BIN (app.pipeline), "filesink");
   app_update_filesink_location (&app);
@@ -460,6 +514,7 @@ main (int argc, char **argv)
   app.loop = g_main_loop_new (NULL, FALSE);
   gst_bus_add_watch (GST_ELEMENT_BUS (app.pipeline), bus_cb, &app);
 
+  // Soup setup
   app.stopping = 0;
   app.restart = 0;
   app.server = soup_server_new (SOUP_SERVER_SERVER_HEADER, "recorder ", NULL);
