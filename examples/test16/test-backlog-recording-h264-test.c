@@ -49,6 +49,11 @@
 // is still receiving buffers.
 #define V4L2SRC_MONITOR_TIMER_INTERVAL 3
 
+#define STOPPED   0
+#define RECORDING 1
+#define STOPPING  2
+#define RESTART   3
+
 typedef struct
 {
   GstElement *pipeline, *vrecq, *arecq;
@@ -64,8 +69,7 @@ typedef struct
   guint audio_buffer_count;
   guint chunk_count;
   SoupServer *server;
-  guint stopping;
-  guint restart;
+  guint state;
   gchar *file_format;
   guint file_modulo;
   guint v4l2_src_frame_cnt;
@@ -120,11 +124,12 @@ bus_cb (GstBus * bus, GstMessage * msg, gpointer user_data)
           app_update_filesink_location (app);
           gst_element_set_state (app->filesink, GST_STATE_PLAYING);
           gst_element_set_state (app->muxer, GST_STATE_PLAYING);
-          app->stopping = 0;
-          if (app->restart == 1) {
+          if (app->state == RESTART) {
+            app->state = STOPPED;
             g_print ("restart recording\n");
             start_recording_cb (app);
-            app->restart = 0;
+          } else {
+            app->state = STOPPED;
           }
         }
         gst_message_unref (forward_msg);
@@ -306,7 +311,7 @@ block_video_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
       GST_PAD_PROBE_TYPE_BUFFER);
   /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
 
-  if(app->stopping == 1) {
+  if(app->state == STOPPING || app->state == RESTART) {
     GThread *thread;
     g_print ("Starting eos-push-thread\n");
     thread = g_thread_new ("eos-push-thread", push_eos_thread, app);
@@ -325,7 +330,7 @@ block_audio_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
       GST_PAD_PROBE_TYPE_BUFFER);
   /* FIXME: this doesn't work: gst_buffer_replace ((GstBuffer **) &info->data, NULL); */
 
-  if(app->stopping == 1) {
+  if(app->state == STOPPING || app->state == RESTART) {
     GThread *thread;
     g_print ("Starting eos-audio-push-thread\n");
     thread = g_thread_new ("eos-audio-push-thread", push_audio_eos_thread, app);
@@ -339,19 +344,23 @@ stop_recording_cb (gpointer user_data)
 {
   RecordApp *app = user_data;
 
-  g_print ("stop recording\n");
+  if (app->state == RECORDING) {
+    g_print ("stop recording\n");
 
-  app->arecq_src_probe_id = gst_pad_add_probe (app->arecq_src,
-      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
-      app, NULL);
-  app->vrecq_src_probe_id = gst_pad_add_probe (app->vrecq_src,
-      GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_video_probe_cb,
-      app, NULL);
+    app->arecq_src_probe_id = gst_pad_add_probe (app->arecq_src,
+        GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
+        app, NULL);
+    app->vrecq_src_probe_id = gst_pad_add_probe (app->vrecq_src,
+        GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_video_probe_cb,
+        app, NULL);
 
-  g_print ("vrecq_src_probe_id = %lu \n", app->vrecq_src_probe_id);
-  g_print ("arecq_src_probe_id = %lu \n", app->arecq_src_probe_id);
+    g_print ("vrecq_src_probe_id = %lu \n", app->vrecq_src_probe_id);
+    g_print ("arecq_src_probe_id = %lu \n", app->arecq_src_probe_id);
 
-  app->stopping = 1;
+    app->state = STOPPING;
+  } else {
+    g_print ("Ignoring stop\n");
+  }
 
   return FALSE;                 /* don't call us again */
 }
@@ -361,20 +370,29 @@ start_recording_cb (gpointer user_data)
 {
   RecordApp *app = user_data;
 
-  g_print ("unblocking pad to start recording\n");
+  if (app->state == STOPPED) {
+    g_print ("Start recording\n");
 
-  /* need to hook up another probe to drop the initial old buffer stuck
-   * in the blocking pad probe */
-  app->video_buffer_count = 0;
-  app->audio_buffer_count = 0;
-  gst_pad_add_probe (app->vrecq_src,
-      GST_PAD_PROBE_TYPE_BUFFER, probe_drop_one_cb, app, NULL);
-  gst_pad_add_probe (app->arecq_src,
-      GST_PAD_PROBE_TYPE_BUFFER, probe_audio_drop_one_cb, app, NULL);
+    /* need to hook up another probe to drop the initial old buffer stuck
+     * in the blocking pad probe */
+    app->video_buffer_count = 0;
+    app->audio_buffer_count = 0;
+    gst_pad_add_probe (app->vrecq_src,
+        GST_PAD_PROBE_TYPE_BUFFER, probe_drop_one_cb, app, NULL);
+    gst_pad_add_probe (app->arecq_src,
+        GST_PAD_PROBE_TYPE_BUFFER, probe_audio_drop_one_cb, app, NULL);
 
-  /* now remove the blocking probe to unblock the pad */
-  gst_pad_remove_probe (app->vrecq_src, app->vrecq_src_probe_id);
-  app->vrecq_src_probe_id = 0;
+    /* now remove the blocking probe to unblock the pad */
+    g_print ("unblocking pad to start recording\n");
+    gst_pad_remove_probe (app->vrecq_src, app->vrecq_src_probe_id);
+    app->vrecq_src_probe_id = 0;
+    app->state = RECORDING;
+  } else if (app->state == STOPPING) {
+    // Restart if we're currently busy stopping
+    app->state = RESTART;
+  } else {
+    g_print ("Ignoring start\n");
+  }
 }
 
 static void
@@ -398,13 +416,7 @@ start_callback (SoupServer        *server,
     mime_type = "text/html";
     body = "OK";
 
-    if (app->stopping == 0) {
-      // only start if we're not busy stopping
-      g_print ("Start recording\n");
-      start_recording_cb (app);
-    } else {
-      app->restart = 1;
-    }
+    start_recording_cb (app);
 
     g_print ("Sending status OK with body text/html: OK\n");
     soup_message_set_status (msg, SOUP_STATUS_OK);
@@ -434,7 +446,6 @@ stop_callback (SoupServer        *server,
 
     mime_type = "text/html";
 
-    g_print ("Sop recording\n");
     stop_recording_cb (app);
 
     g_print ("Sending status OK with body text/html: OK\n");
@@ -515,8 +526,7 @@ main (int argc, char **argv)
   gst_bus_add_watch (GST_ELEMENT_BUS (app.pipeline), bus_cb, &app);
 
   // Soup setup
-  app.stopping = 0;
-  app.restart = 0;
+  app.state = STOPPED;
   app.server = soup_server_new (SOUP_SERVER_SERVER_HEADER, "recorder ", NULL);
   soup_server_listen_all (app.server, 9620, 0, &error);
   soup_server_add_handler (app.server, "/start", start_callback, &app, NULL);
