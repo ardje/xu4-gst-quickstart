@@ -43,7 +43,7 @@
 
 // How many seconds after startup should be checked if the v4l2src
 // started receiving buffers.
-#define V4L2SRC_STARTUP_DELAY_MONITOR  25
+#define V4L2SRC_STARTUP_DELAY_MONITOR  35
 
 // At which interval we want to continue checking if the v4l2src
 // is still receiving buffers.
