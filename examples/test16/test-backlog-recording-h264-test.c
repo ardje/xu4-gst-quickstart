@@ -347,6 +347,8 @@ stop_recording_cb (gpointer user_data)
   if (app->state == RECORDING) {
     g_print ("stop recording\n");
 
+    app->state = STOPPING;
+
     app->arecq_src_probe_id = gst_pad_add_probe (app->arecq_src,
         GST_PAD_PROBE_TYPE_BLOCK | GST_PAD_PROBE_TYPE_BUFFER, block_audio_probe_cb,
         app, NULL);
@@ -356,8 +358,6 @@ stop_recording_cb (gpointer user_data)
 
     g_print ("vrecq_src_probe_id = %lu \n", app->vrecq_src_probe_id);
     g_print ("arecq_src_probe_id = %lu \n", app->arecq_src_probe_id);
-
-    app->state = STOPPING;
   } else {
     g_print ("Ignoring stop\n");
   }
