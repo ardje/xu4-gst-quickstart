@@ -1,0 +1,21 @@
+@startuml
+participant Soup
+participant App
+participant Gstreamer
+
+== Normal usecase ==
+
+Soup -> App: Start (EV_SOUP_START)
+App -> Gstreamer: Start
+ref over Gstreamer : Waiting for keyframe
+Gstreamer --> App: Started (EV_GST_STARTED)
+activate App
+
+Soup -> App: Stop (EV_SOUP_STOP)
+App -> Gstreamer: Stop
+ref over Gstreamer : Waiting for EOS pushed
+Gstreamer --> App: Stopped (EV_GST_STOPPED)
+deactivate App
+
+@enduml
+
